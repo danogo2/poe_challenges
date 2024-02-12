@@ -1,10 +1,13 @@
 // ==UserScript==
 // @name         PoE Challenges
 // @namespace    http://tampermonkey.net/
-// @version      2024-01-31
+// @version      000.001.000
+// @updateURL       https://raw.githubusercontent.com/danogo2/poe_challenges/main/index.js
+// @downloadURL  https://raw.githubusercontent.com/danogo2/poe_challenges/main/index.js
 // @description  try to take over the world!
 // @author       You
-// @match        https://poedb.tw/us/*
+// @match        https://poedb.tw/us/*_challenges
+// @match        https://poedb.tw/us/*_challenges#*Challenge
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=poedb.tw
 // @grant        GM_addStyle
 // @run-at       document-end
@@ -15,7 +18,7 @@
   GM_addStyle(`
   /* change default styles */
 input.card-query {
-  margin: 0;
+  display: none;
 }
 
 /* settings header */
@@ -74,11 +77,18 @@ input[type='checkbox'].hidden {
   width: 150px;
   text-align: center;
   padding: 4px;
+  border-radius: 4px;
 }
 
 .tag-option {
   /* only color and background color can be styled via css for select's option, the rest is OS-dependent */
   width: 150px;
+}
+
+.input-search {
+  width: 150px;
+  padding: 4px;
+  border-radius: 4px;
 }
 
 /* challenge element */
@@ -139,9 +149,11 @@ li:has(.task-check:checked) .task-text {
   margin-left: 10px;
 }
 
-.tag-hidden {
+.tag-hidden,
+.search-hidden {
   display: none;
 }
+
 `);
 
   const svgIconEye =
@@ -156,7 +168,7 @@ li:has(.task-check:checked) .task-text {
   let challsMap = new Map(); // {challengeIndex/ID: {quantity: 1,tasks: [{isComplete:false, note=''}, {isComplete:false, note=''}]}
   const challElements = new Map();
   let challsGotLoaded = false;
-  let league, clearIconEl, selectTagEl;
+  let league;
   let lastSelectedTagValue = '';
 
   const allTagsSet = new Set();
@@ -167,6 +179,10 @@ li:has(.task-check:checked) .task-text {
 
   const updateLS = () => {
     localStorage.setItem(league, JSON.stringify(Array.from(challsMap)));
+  };
+
+  const isChallengeComplete = chall => {
+    return chall.completed >= chall.quantity;
   };
 
   const formatTask = taskEl => {
@@ -190,10 +206,6 @@ li:has(.task-check:checked) .task-text {
     return taskEl.querySelector(':last-child');
   };
 
-  const isChallengeComplete = chall => {
-    return chall.completed >= chall.quantity;
-  };
-
   const insertTagInputEl = (headerEl, id, challObj) => {
     headerEl.insertAdjacentHTML(
       'beforeend',
@@ -206,6 +218,35 @@ li:has(.task-check:checked) .task-text {
     }
     const tagsString = curChalTags.join(', ');
     headerEl.querySelector('.input-tag').value = tagsString;
+  };
+
+  // on load, single html inserts
+  const insertHideCheckboxEl = parentEl => {
+    parentEl.insertAdjacentHTML(
+      'beforeend',
+      `<div class="settings-option"><input type="checkbox" id="hide-completed" class="hide-completed hidden"/><label class="label-checkbox" for="hide-completed"><div class="settings-icon icon-hide" title="hide completed">${svgIconEye}</div><div class="settings-icon icon-show" title="show completed">${svgIconEyeOff}</div></label></div>`
+    );
+  };
+  const insertTagSelectEl = parentEl => {
+    parentEl.insertAdjacentHTML(
+      'beforeend',
+      '<div class="settings-option"><select name="tags" id="tags"><option class="tag-option" value="">---</option></select></div>'
+    );
+    return parentEl.querySelector('#tags');
+  };
+  const insertSearchInputEl = parentEl => {
+    parentEl.insertAdjacentHTML(
+      'beforeend',
+      '<div class="settings-option"><input type="search" name="search" id="search" class="input-search" placeholder="Search" /></div>'
+    );
+    return parentEl.querySelector('.input-search');
+  };
+  const insertClearIconEl = parentEl => {
+    parentEl.insertAdjacentHTML(
+      'beforeend',
+      `<div class="settings-option"><div class="settings-icon icon-clear" title="clear challenges">${svgIconTrash}</div></div>`
+    );
+    return parentEl.querySelector('.icon-clear');
   };
 
   // using this method because {element.innerHTML = ''}doesn't clear event handlers of the child nodes and might cause memory leak
@@ -231,7 +272,7 @@ li:has(.task-check:checked) .task-text {
     resetTagsSet();
     selectEl.insertAdjacentHTML(
       'afterbegin',
-      '<option class="tag-option" value="">--Choose a tag--</option>'
+      '<option class="tag-option" value="">---</option>'
     );
     for (let tag of allTagsSet.values()) {
       selectEl.insertAdjacentHTML(
@@ -263,11 +304,21 @@ li:has(.task-check:checked) .task-text {
     updateLS();
   };
 
+  const getChallengeSearchChars = (header, singleTask, subTasks) => {
+    const subTasksString = [...subTasks]
+      .map(taskEl => taskEl.textContent)
+      .join('');
+    const allChars =
+      header.textContent + singleTask.textContent + subTasksString;
+
+    return allChars.replaceAll(' ', '').toLowerCase();
+  };
+
   const formatChallenge = challEl => {
     const id = challEl.querySelector(':first-child').textContent; // starting from 1, 2, 3...
+    const header = challEl.querySelector('td:nth-child(2) div');
     const singleTask = challEl.querySelector('.text-start div');
     let subTasks = challEl.querySelectorAll('li');
-    const header = challEl.querySelector('td:nth-child(2) div');
 
     // if there is only 1 task/no subtasks
     if (subTasks.length < 1) {
@@ -287,9 +338,11 @@ li:has(.task-check:checked) .task-text {
         tasks,
         completed: 0,
         tags: [],
+        allChars: '',
       });
     }
     const challObj = challsMap.get(id);
+    challObj.allChars = getChallengeSearchChars(header, singleTask, subTasks);
     insertTagInputEl(header, id, challObj);
     for (let i = 0; i < subTasks.length; i++) {
       const taskEl = subTasks[i];
@@ -337,6 +390,38 @@ li:has(.task-check:checked) .task-text {
     }
   };
 
+  const testAllValues = (testValues, str) => {
+    let hasAllValues = true;
+    for (let value of testValues) {
+      const re = new RegExp(value);
+      if (!re.test(str)) {
+        hasAllValues = false;
+        break;
+      }
+    }
+    return hasAllValues;
+  };
+
+  const searchChallHandler = event => {
+    const searchEl = event.target;
+    const searchValue = searchEl.value.toLowerCase();
+    let searchValues = '';
+    if (searchValue !== '') searchValues = [...searchValue.match(/\S+/g)];
+
+    console.log('Search value:', searchValue);
+    for (let [id, challObj] of challsMap.entries()) {
+      const challEl = challElements.get(id);
+      if (
+        searchValue === '' ||
+        testAllValues(searchValues, challObj.allChars)
+      ) {
+        challEl.classList.remove('search-hidden');
+      } else {
+        challEl.classList.add('search-hidden');
+      }
+    }
+  };
+
   window.onload = event => {
     league = window.location.pathname
       .split('/')
@@ -344,18 +429,12 @@ li:has(.task-check:checked) .task-text {
       .replace(/#(?<=#)\w+/g, '');
     const settingsNav = document.querySelector('.tab-content .card.mb-2 div');
     settingsNav.classList.add('settings');
-    settingsNav.insertAdjacentHTML(
-      'afterbegin',
-      '<div class="settings-option"><select name="tags" id="tags"><option class="tag-option" value="">--Choose a tag--</option></select></div>'
-    );
-    settingsNav.insertAdjacentHTML(
-      'afterbegin',
-      `<div class="settings-option"><input type="checkbox" id="hide-completed" class="hide-completed hidden"/><label class="label-checkbox" for="hide-completed"><div class="settings-icon icon-hide" title="hide completed">${svgIconEye}</div><div class="settings-icon icon-show" title="show completed">${svgIconEyeOff}</div></label></div>`
-    );
-    settingsNav.insertAdjacentHTML(
-      'beforeend',
-      `<div class="settings-option"><div class="settings-icon icon-clear" title="clear challenges">${svgIconTrash}</div></div>`
-    );
+
+    insertHideCheckboxEl(settingsNav);
+    const selectTagEl = insertTagSelectEl(settingsNav);
+    const searchInputEl = insertSearchInputEl(settingsNav);
+    const clearIconEl = insertClearIconEl(settingsNav);
+
     const loadedChalls = getChallsFromLS(league);
     if (loadedChalls !== null) {
       challsMap = new Map(loadedChalls);
@@ -371,13 +450,14 @@ li:has(.task-check:checked) .task-text {
     // update dropdown menu
     if (challsGotLoaded) updateTagsDropdownHTML();
     // single element event handlers
-    clearIconEl = document.querySelector('.icon-clear');
     clearIconEl.addEventListener('click', event => {
       clearChallsHandler(event);
     });
-    selectTagEl = document.querySelector('#tags');
     selectTagEl.addEventListener('change', event => {
       selectTagHandler(event);
+    });
+    searchInputEl.addEventListener('input', event => {
+      searchChallHandler(event);
     });
   };
 
