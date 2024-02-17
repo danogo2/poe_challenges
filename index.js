@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         PoE Challenges
+// @name         PoEDB Challenges
 // @namespace    http://tampermonkey.net/
 // @version      000.001.000
 // @updateURL       https://raw.githubusercontent.com/danogo2/poe_challenges/main/index.js
@@ -165,7 +165,7 @@ li:has(.task-check:checked) .task-text {
   const svgIconTrash =
     '<svg xmlns="http://www.w3.org/2000/svg" class="ionicon" viewBox="0 0 512 512"><path d="M296 64h-80a7.91 7.91 0 00-8 8v24h96V72a7.91 7.91 0 00-8-8z" fill="none"/><path d="M432 96h-96V72a40 40 0 00-40-40h-80a40 40 0 00-40 40v24H80a16 16 0 000 32h17l19 304.92c1.42 26.85 22 47.08 48 47.08h184c26.13 0 46.3-19.78 48-47l19-305h17a16 16 0 000-32zM192.57 416H192a16 16 0 01-16-15.43l-8-224a16 16 0 1132-1.14l8 224A16 16 0 01192.57 416zM272 400a16 16 0 01-32 0V176a16 16 0 0132 0zm32-304h-96V72a7.91 7.91 0 018-8h80a7.91 7.91 0 018 8zm32 304.57A16 16 0 01320 416h-.58A16 16 0 01304 399.43l8-224a16 16 0 1132 1.14z" fill="#fafafa"/></svg>';
 
-  let challsMap = new Map(); // {challengeIndex/ID: {quantity: 1,tasks: [{isComplete:false, note=''}, {isComplete:false, note=''}]}
+  let challObjMap = new Map(); // {challengeIndex/ID: {quantity: 1,tasks: [{isComplete:false, note=''}, {isComplete:false, note=''}]}
   const challElements = new Map();
   let challsGotLoaded = false;
   let league;
@@ -178,7 +178,7 @@ li:has(.task-check:checked) .task-text {
   };
 
   const updateLS = () => {
-    localStorage.setItem(league, JSON.stringify(Array.from(challsMap)));
+    localStorage.setItem(league, JSON.stringify(Array.from(challObjMap)));
   };
 
   const isChallengeComplete = chall => {
@@ -221,7 +221,7 @@ li:has(.task-check:checked) .task-text {
   };
 
   // on load, single html inserts
-  const insertHideCheckboxEl = parentEl => {
+  const insertHideButtonEl = parentEl => {
     parentEl.insertAdjacentHTML(
       'beforeend',
       `<div class="settings-option"><input type="checkbox" id="hide-completed" class="hide-completed hidden"/><label class="label-checkbox" for="hide-completed"><div class="settings-icon icon-hide" title="hide completed">${svgIconEye}</div><div class="settings-icon icon-show" title="show completed">${svgIconEyeOff}</div></label></div>`
@@ -258,7 +258,7 @@ li:has(.task-check:checked) .task-text {
 
   const resetTagsSet = () => {
     allTagsSet.clear();
-    for (let challObj of challsMap.values()) {
+    for (let challObj of challObjMap.values()) {
       for (let tag of challObj.tags) {
         allTagsSet.add(tag);
       }
@@ -333,7 +333,7 @@ li:has(.task-check:checked) .task-text {
         isComplete: false,
         note: '',
       })); // or new Array and fill with foor loop, avoid fill method when filling with objects because it only gives reference to <th></th>e first object
-      challsMap.set(id, {
+      challObjMap.set(id, {
         quantity: subTasks.length === 1 ? 1 : quantity,
         tasks,
         completed: 0,
@@ -341,7 +341,7 @@ li:has(.task-check:checked) .task-text {
         allChars: '',
       });
     }
-    const challObj = challsMap.get(id);
+    const challObj = challObjMap.get(id);
     challObj.allChars = getChallengeSearchChars(header, singleTask, subTasks);
     insertTagInputEl(header, id, challObj);
     for (let i = 0; i < subTasks.length; i++) {
@@ -376,7 +376,7 @@ li:has(.task-check:checked) .task-text {
     const selectedTagIndex = event.target.selectedIndex;
     lastSelectedTagValue = selectedTagValue;
     // hide challenges without selected tag
-    for (let [id, challObj] of challsMap.entries()) {
+    for (let [id, challObj] of challObjMap.entries()) {
       const curChallEl = challElements.get(id);
       if (
         selectedTagIndex !== 0 &&
@@ -409,7 +409,7 @@ li:has(.task-check:checked) .task-text {
     if (searchValue !== '') searchValues = [...searchValue.match(/\S+/g)];
 
     console.log('Search value:', searchValue);
-    for (let [id, challObj] of challsMap.entries()) {
+    for (let [id, challObj] of challObjMap.entries()) {
       const challEl = challElements.get(id);
       if (
         searchValue === '' ||
@@ -430,14 +430,14 @@ li:has(.task-check:checked) .task-text {
     const settingsNav = document.querySelector('.tab-content .card.mb-2 div');
     settingsNav.classList.add('settings');
 
-    insertHideCheckboxEl(settingsNav);
+    insertHideButtonEl(settingsNav);
     const selectTagEl = insertTagSelectEl(settingsNav);
     const searchInputEl = insertSearchInputEl(settingsNav);
     const clearIconEl = insertClearIconEl(settingsNav);
 
     const loadedChalls = getChallsFromLS(league);
     if (loadedChalls !== null) {
-      challsMap = new Map(loadedChalls);
+      challObjMap = new Map(loadedChalls);
       challsGotLoaded = true;
     }
     const challs = document.querySelectorAll('tr:has(.explicitMod)');
@@ -467,7 +467,7 @@ li:has(.task-check:checked) .task-text {
     const challId = id.match(/\d+(?=-)/)[0];
     const taskIndex = id.match(/(?<=-)\d+/)[0];
     const isComplete = checkboxEl.checked;
-    const chall = challsMap.get(challId);
+    const chall = challObjMap.get(challId);
     if (isComplete) {
       chall.completed++; // completed tasks counter
     } else {
@@ -487,7 +487,7 @@ li:has(.task-check:checked) .task-text {
     const id = taskEl.dataset.id; //'challId-noteIndex'
     const challId = id.match(/\d+(?=-)/)[0];
     const taskIndex = id.match(/(?<=-)\d+/)[0];
-    const chall = challsMap.get(challId);
+    const chall = challObjMap.get(challId);
     chall.tasks[taskIndex].note = noteEl.value;
     updateLS();
   };
@@ -502,7 +502,7 @@ li:has(.task-check:checked) .task-text {
     const formattedTags = enteredTags.map(tag => tag.slice(0, 16));
 
     const challId = tagInputEl.dataset.id; // 'challId'
-    const challObj = challsMap.get(challId);
+    const challObj = challObjMap.get(challId);
     challObj.tags = [];
     for (let tag of formattedTags) {
       challObj.tags.push(tag);
