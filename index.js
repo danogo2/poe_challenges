@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PoEDB Challenges
 // @namespace    http://tampermonkey.net/
-// @version      000.001.000
+// @version      000.001.001
 // @updateURL       https://raw.githubusercontent.com/danogo2/poe_challenges/main/index.js
 // @downloadURL  https://raw.githubusercontent.com/danogo2/poe_challenges/main/index.js
 // @description  try to take over the world!
